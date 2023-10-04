@@ -112,7 +112,9 @@ static void VideoReceiveThreadProc(void* context) {
             }
         }
 
-        err = recvUdpSocket(rtpSocket, buffer, receiveSize, useSelect);
+	unsigned char received_ecn = 0;
+        err = recvUdpSocketECN(rtpSocket, buffer, receiveSize, useSelect, &received_ecn);
+	Limelog("ECN: ecn:%d\n", received_ecn);
         if (err < 0) {
             Limelog("Video Receive: recvUdpSocket() failed: %d\n", (int)LastSocketError());
             ListenerCallbacks.connectionTerminated(LastSocketFail());
@@ -272,6 +274,26 @@ int startVideoStream(void* rendererContext, int drFlags) {
     if (rtpSocket == INVALID_SOCKET) {
         VideoCallbacks.cleanup();
         return LastSocketError();
+    }
+
+    // Enable ECN receival
+    unsigned char set = 0x03;
+    if (setsockopt(rtpSocket, IPPROTO_IP, IP_RECVTOS, &set, sizeof(set)) < 0)
+    {
+	    printf("ECN: ERR: cannot set recvtos on incoming socket\n");
+    }
+    else
+    {
+	    printf("ECN: socket set to recvtos\n");
+    }
+
+    // Connect our video socket to the target address and port
+    LC_ASSERT(VideoPortNumber != 0);
+    err = connectUdpSocket(rtpSocket, &RemoteAddr, RemoteAddrLen, VideoPortNumber);
+    if (err != 0) {
+        VideoCallbacks.cleanup();
+        closeSocket(rtpSocket);
+        return err;
     }
 
     VideoCallbacks.start();
