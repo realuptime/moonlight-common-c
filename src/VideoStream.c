@@ -339,7 +339,7 @@ int startVideoStream(void* rendererContext, int drFlags) {
 
     // Connect our video socket to the target address and port
     LC_ASSERT(VideoPortNumber != 0);
-    err = connectUdpSocket(rtpSocket, &RemoteAddr, AddrLen, VideoPortNumber);
+    err = connectUdpSocket(rtpSocket, &RemoteAddr, RemoteAddrLen, VideoPortNumber);
     if (err != 0) {
         VideoCallbacks.cleanup();
         closeSocket(rtpSocket);
