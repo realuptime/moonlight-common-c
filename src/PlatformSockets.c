@@ -281,7 +281,7 @@ int recvUdpSocketECN(SOCKET s, char* buffer, int size, bool useSelect, unsigned 
     } while (err < 0 && LastSocketError() == ECONNREFUSED);
 #endif
 
-    if (received_ecn)
+    if (received_ecn && err > 0)
     {
 	struct cmsghdr *cmptr;
 	int *ecnptr;
