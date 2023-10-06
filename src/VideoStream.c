@@ -1,4 +1,5 @@
 #include "Limelight-internal.h"
+#include "ScreamWrapper.h"
 
 #define FIRST_FRAME_MAX 1500
 #define FIRST_FRAME_TIMEOUT_SEC 10
@@ -83,7 +84,7 @@ static void VideoReceiveThreadProc(void* context) {
     receiveSize = StreamConfig.packetSize + MAX_RTP_HEADER_SIZE;
     bufferSize = receiveSize + sizeof(RTPV_QUEUE_ENTRY);
     buffer = NULL;
-
+	screamInit();
     if (setNonFatalRecvTimeoutMs(rtpSocket, UDP_RECV_POLL_TIMEOUT_MS) < 0) {
         // SO_RCVTIMEO failed, so use select() to wait
         useSelect = true;
