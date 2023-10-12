@@ -8,8 +8,8 @@
 #include <iostream>
 #include "netinet/in.h"
 
-#define ACK_DIFF 4
-#define REPORTED_RTP_PACKETS 4
+#define ACK_DIFF -1
+#define REPORTED_RTP_PACKETS 64
 #define SSRC 1
 
 using namespace std;
@@ -35,10 +35,6 @@ class ScreamRxProxy
 	public:
 		ScreamRxProxy()
         {
-			   struct timeval tp;
-			   gettimeofday(&tp, NULL);
-			   t0 = tp.tv_sec + tp.tv_usec*1e-6;
-
                screamRx = new ScreamRx(SSRC, ACK_DIFF, REPORTED_RTP_PACKETS);
 		}
 		
@@ -46,7 +42,14 @@ class ScreamRxProxy
         {
             std::lock_guard<std::mutex> lock { lock_scream };
 
-			uint32_t time_ntp = getTimeInNtp();
+            if (t0 == 0.0f)
+            {
+                struct timeval tp;
+			    gettimeofday(&tp, NULL);
+			    t0 = tp.tv_sec + tp.tv_usec*1e-6;
+            }
+			
+            uint32_t time_ntp = getTimeInNtp();
 #if 1
 			if (time_ntp - last_received_time_ntp > 2 * 65536)
             { // 2 sec
@@ -77,6 +80,8 @@ class ScreamRxProxy
 	  bool getFeedback(unsigned char *buf, int *rtcpSize)
       {
         std::lock_guard<std::mutex> lock { lock_scream };
+
+        if (t0 == 0.0f) return false;
 
         uint32_t time_ntp = getTimeInNtp();
         bool isFeedback = false;

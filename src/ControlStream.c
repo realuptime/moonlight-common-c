@@ -278,7 +278,7 @@ static bool supportsIdrFrameRequest;
 
 #define LOSS_REPORT_INTERVAL_MS 50
 #define PERIODIC_PING_INTERVAL_MS 100
-#define RTCP_INTERVAL_MS 500
+#define RTCP_INTERVAL_MS 20
 
 // Initializes the control stream
 int initializeControlStream(void) {
@@ -1393,7 +1393,7 @@ static void screamRtcpThreadFunc(void* context)
 				 rtcpPayload = malloc(rtcpPayloadSize);
 			 }
 
-             printf("RTCP: screamSize:%d\n", screamSize);
+             //printf("RTCP: screamSize:%d\n", screamSize);
              //if (!sendMessageAndForget(
              if (!sendMessageAndDiscardReply(
                          RTCP_PACKET_TYPE,
