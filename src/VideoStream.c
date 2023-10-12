@@ -90,7 +90,6 @@ static void VideoReceiveThreadProc(void* context) {
     receiveSize = StreamConfig.packetSize + MAX_RTP_HEADER_SIZE;
     bufferSize = receiveSize + sizeof(RTPV_QUEUE_ENTRY);
     buffer = NULL;
-	screamInit();
     if (setNonFatalRecvTimeoutMs(rtpSocket, UDP_RECV_POLL_TIMEOUT_MS) < 0) {
         // SO_RCVTIMEO failed, so use select() to wait
         useSelect = true;
@@ -113,9 +112,9 @@ static void VideoReceiveThreadProc(void* context) {
             }
         }
 
-	unsigned char received_ecn = 0;
+	    unsigned char received_ecn = 0;
         err = recvUdpSocketECN(rtpSocket, buffer, receiveSize, useSelect, &received_ecn);
-	Limelog("ECN: ecn:%d\n", received_ecn);
+	    Limelog("ECN: ecn:%d\n", received_ecn);
         if (err < 0) {
             Limelog("Video Receive: recvUdpSocket() failed: %d\n", (int)LastSocketError());
             ListenerCallbacks.connectionTerminated(LastSocketFail());
@@ -136,6 +135,7 @@ static void VideoReceiveThreadProc(void* context) {
             // Receive timed out; try again
             continue;
         }
+		
 
         if (!receivedDataFromPeer) {
             receivedDataFromPeer = true;
@@ -166,8 +166,13 @@ static void VideoReceiveThreadProc(void* context) {
         packet->sequenceNumber = BE16(packet->sequenceNumber);
         packet->timestamp = BE32(packet->timestamp);
         packet->ssrc = BE32(packet->ssrc);
-
-        queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize]);
+        bool isMark = false;
+        queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize], &isMark);
+		
+		if(err > 0 && (int)received_ecn == 1)
+		{
+				screamReceive(buffer, err, received_ecn, isMark);
+		}
 
         if (queueStatus == RTPF_RET_QUEUED) {
             // The queue owns the buffer

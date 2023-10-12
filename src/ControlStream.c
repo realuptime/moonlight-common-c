@@ -2,6 +2,7 @@
 
 // This is a private header, but it just contains some time macros
 #include <enet/time.h>
+#include "ScreamWrapper.h"
 
 // NV control stream packet header for TCP
 typedef struct _NVCTL_TCP_PACKET_HEADER {
@@ -77,6 +78,7 @@ static PLT_THREAD invalidateRefFramesThread;
 static PLT_THREAD requestIdrFrameThread;
 static PLT_THREAD controlReceiveThread;
 static PLT_THREAD asyncCallbackThread;
+static PLT_THREAD screamRtcpThread;
 static uint32_t lastGoodFrame;
 static uint32_t lastSeenFrame;
 static bool stopping;
@@ -118,6 +120,7 @@ static PPLT_CRYPTO_CONTEXT decryptionCtx;
 #define IDX_RUMBLE_TRIGGER_DATA 9
 #define IDX_SET_MOTION_EVENT 10
 #define IDX_SET_RGB_LED 11
+#define IDX_RTCP 7
 
 #define CONTROL_STREAM_TIMEOUT_SEC 10
 #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
@@ -177,6 +180,7 @@ static const short packetTypesGen7[] = {
     -1,     // Rumble triggers (unused)
     -1,     // Set motion event (unused)
     -1,     // Set RGB LED (unused)
+	0x010f // RTCP
 };
 static const short packetTypesGen7Enc[] = {
     0x0302, // Request IDR frame
@@ -191,6 +195,7 @@ static const short packetTypesGen7Enc[] = {
     0x5500, // Rumble triggers (Sunshine protocol extension)
     0x5501, // Set motion event (Sunshine protocol extension)
     0x5502, // Set RGB LED (Sunshine protocol extension)
+	0x010f // RTCP
 };
 
 static const char requestIdrFrameGen3[] = { 0, 0 };
@@ -211,6 +216,7 @@ static const short payloadLengthsGen3[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
+	32, //RTCP
 };
 static const short payloadLengthsGen4[] = {
     sizeof(requestIdrFrameGen4), // Request IDR frame
@@ -219,6 +225,7 @@ static const short payloadLengthsGen4[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
+	32, //RTCP
 };
 static const short payloadLengthsGen5[] = {
     sizeof(startAGen5), // Start A
@@ -227,6 +234,7 @@ static const short payloadLengthsGen5[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
+	32, //RTCP
 };
 static const short payloadLengthsGen7[] = {
     sizeof(startAGen5), // Start A
@@ -235,6 +243,7 @@ static const short payloadLengthsGen7[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
+	32, // RTCP
 };
 static const short payloadLengthsGen7Enc[] = {
     sizeof(requestIdrFrameGen7Enc), // Request IDR frame
@@ -243,6 +252,7 @@ static const short payloadLengthsGen7Enc[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
+	32, //RTCP
 };
 
 static const char* preconstructedPayloadsGen3[] = {
@@ -273,6 +283,7 @@ static bool supportsIdrFrameRequest;
 
 #define LOSS_REPORT_INTERVAL_MS 50
 #define PERIODIC_PING_INTERVAL_MS 100
+#define RTCP_INTERVAL_MS 500
 
 // Initializes the control stream
 int initializeControlStream(void) {
@@ -1357,6 +1368,33 @@ static void lossStatsThreadFunc(void* context) {
     }
 }
 
+static void screamRtcpThreadFunc(void* context) {
+	unsigned char* rctpPayload;
+	int rtcpPayloadSize; 
+	bool isFeedback = false ;
+	
+	rctpPayload = malloc(payloadLengths[IDX_RTCP]);
+	
+	while (!PltIsThreadInterrupted(&screamRtcpThread)) {
+		
+		 if(screamGetFeedback(rctpPayload, &rtcpPayloadSize)){
+			 if(rtcpPayloadSize > payloadLengths[IDX_RTCP]){
+				 free(rctpPayload);
+				 rctpPayload = malloc(rtcpPayloadSize);
+			 } else{
+				 if (!sendMessageAndForget(0x010f, rtcpPayloadSize, rctpPayload, CTRL_CHANNEL_GENERIC, ENET_PACKET_FLAG_RELIABLE, false)) {
+						Limelog("RTCP Stats: Transaction failed: %d\n", (int)LastSocketError());
+						break;
+				 } 
+			 }
+			 memset(rctpPayload, 0, sizeof(rtcpPayloadSize));
+			 rtcpPayloadSize = 0;
+		 }
+		 PltSleepMsInterruptible(&screamRtcpThread, RTCP_INTERVAL_MS);
+	}
+	free(rctpPayload);
+}
+
 static void requestIdrFrame(void) {
     // If this server does not have a known IDR frame request
     // message, we'll accomplish the same thing by creating a
@@ -1864,6 +1902,12 @@ int startControlStream(void) {
 
         return err;
     }
+	
+	err = PltCreateThread("ScreamRTCP", screamRtcpThreadFunc, NULL, &screamRtcpThread);
+	
+	if(err != 0){
+		Limelog("ScreamRTCP thread failed");
+	}
 
     // Only create the reference frame invalidation thread if RFI is enabled
     if (isReferenceFrameInvalidationEnabled()) {
