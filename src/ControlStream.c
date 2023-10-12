@@ -4,6 +4,8 @@
 #include <enet/time.h>
 #include "ScreamWrapper.h"
 
+#define RTCP_SIZE 2048
+
 // NV control stream packet header for TCP
 typedef struct _NVCTL_TCP_PACKET_HEADER {
     unsigned short type;
@@ -216,7 +218,7 @@ static const short payloadLengthsGen3[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
-	32, //RTCP
+	RTCP_SIZE, //RTCP
 };
 static const short payloadLengthsGen4[] = {
     sizeof(requestIdrFrameGen4), // Request IDR frame
@@ -225,7 +227,7 @@ static const short payloadLengthsGen4[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
-	32, //RTCP
+	RTCP_SIZE, //RTCP
 };
 static const short payloadLengthsGen5[] = {
     sizeof(startAGen5), // Start A
@@ -234,7 +236,7 @@ static const short payloadLengthsGen5[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
-	32, //RTCP
+	RTCP_SIZE, //RTCP
 };
 static const short payloadLengthsGen7[] = {
     sizeof(startAGen5), // Start A
@@ -243,7 +245,7 @@ static const short payloadLengthsGen7[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
-	32, // RTCP
+	RTCP_SIZE, // RTCP
 };
 static const short payloadLengthsGen7Enc[] = {
     sizeof(requestIdrFrameGen7Enc), // Request IDR frame
@@ -252,7 +254,7 @@ static const short payloadLengthsGen7Enc[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
-	32, //RTCP
+	RTCP_SIZE, //RTCP
 };
 
 static const char* preconstructedPayloadsGen3[] = {
@@ -315,13 +317,15 @@ int initializeControlStream(void) {
         supportsIdrFrameRequest = false;
     }
     else {
-        if (encryptedControlStream) {
+        if (encryptedControlStream)
+        {
             packetTypes = (short*)packetTypesGen7Enc;
             payloadLengths = (short*)payloadLengthsGen7Enc;
             preconstructedPayloads = (char**)preconstructedPayloadsGen7Enc;
             supportsIdrFrameRequest = true;
         }
-        else {
+        else
+        {
             packetTypes = (short*)packetTypesGen7;
             payloadLengths = (short*)payloadLengthsGen7;
             preconstructedPayloads = (char**)preconstructedPayloadsGen7;
@@ -761,7 +765,8 @@ static bool sendMessageTcp(short ptype, short paylen, const void* payload) {
     return true;
 }
 
-static bool sendMessageAndForget(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData) {
+static bool sendMessageAndForget(short ptype, short paylen, const void* payload, uint8_t channelId, uint32_t flags, bool moreData)
+{
     bool ret;
 
     // Unlike regular sockets, ENet sockets aren't safe to invoke from multiple
@@ -1008,7 +1013,8 @@ static void controlReceiveThreadFunc(void* context) {
         return;
     }
 
-    while (!PltIsThreadInterrupted(&controlReceiveThread)) {
+    while (!PltIsThreadInterrupted(&controlReceiveThread))
+    {
         ENetEvent event;
         enet_uint32 waitTimeMs;
 
@@ -1368,31 +1374,45 @@ static void lossStatsThreadFunc(void* context) {
     }
 }
 
-static void screamRtcpThreadFunc(void* context) {
-	unsigned char* rctpPayload;
-	int rtcpPayloadSize; 
-	bool isFeedback = false ;
+static void screamRtcpThreadFunc(void* context)
+{
+	unsigned char* rtcpPayload;
+	int rtcpPayloadSize;
+    int screamSize = 0;
+	bool isFeedback = false;
 	
-	rctpPayload = malloc(payloadLengths[IDX_RTCP]);
-	
-	while (!PltIsThreadInterrupted(&screamRtcpThread)) {
-		
-		 if(screamGetFeedback(rctpPayload, &rtcpPayloadSize)){
-			 if(rtcpPayloadSize > payloadLengths[IDX_RTCP]){
-				 free(rctpPayload);
-				 rctpPayload = malloc(rtcpPayloadSize);
-			 } else{
-				 if (!sendMessageAndForget(0x010f, rtcpPayloadSize, rctpPayload, CTRL_CHANNEL_GENERIC, ENET_PACKET_FLAG_RELIABLE, false)) {
-						Limelog("RTCP Stats: Transaction failed: %d\n", (int)LastSocketError());
-						break;
-				 } 
+    rtcpPayloadSize = RTCP_SIZE;
+	rtcpPayload = malloc(rtcpPayloadSize);
+    printf("RTCP Thread: alloc: %d. ptr:%p\n", rtcpPayloadSize, rtcpPayload);
+    assert(rtcpPayload);
+
+	while (!PltIsThreadInterrupted(&screamRtcpThread))
+    {
+		 if(screamGetFeedback(rtcpPayload, &screamSize))
+         {
+			 if(rtcpPayloadSize < screamSize)
+             {
+                 //Limelog
+                 printf("RTCP Thread: realloc: %d -> %d. ptr:%p\n", rtcpPayloadSize, screamSize, rtcpPayload);
+                 rtcpPayloadSize = screamSize;
+				 free(rtcpPayload);
+				 rtcpPayload = malloc(rtcpPayloadSize);
 			 }
-			 memset(rctpPayload, 0, sizeof(rtcpPayloadSize));
-			 rtcpPayloadSize = 0;
+
+             printf("RTCP: screamSize:%d\n", screamSize);
+             if (!sendMessageAndForget(0x010f, screamSize, rtcpPayload, CTRL_CHANNEL_GENERIC, ENET_PACKET_FLAG_RELIABLE, false))
+             {
+                    Limelog("RTCP Stats: Transaction failed: %d\n", (int)LastSocketError());
+                    break;
+             }
+			 memset(rtcpPayload, 0, rtcpPayloadSize);
 		 }
 		 PltSleepMsInterruptible(&screamRtcpThread, RTCP_INTERVAL_MS);
 	}
-	free(rctpPayload);
+
+    Limelog("RTCP Thread stopped!\n");
+
+	free(rtcpPayload);
 }
 
 static void requestIdrFrame(void) {

@@ -112,20 +112,23 @@ static void VideoReceiveThreadProc(void* context) {
             }
         }
 
-	    unsigned char received_ecn = 0;
+        unsigned char received_ecn = 0;
         err = recvUdpSocketECN(rtpSocket, buffer, receiveSize, useSelect, &received_ecn);
-	    Limelog("ECN: ecn:%d\n", received_ecn);
-        if (err < 0) {
+        if (err < 0)
+        {
             Limelog("Video Receive: recvUdpSocket() failed: %d\n", (int)LastSocketError());
             ListenerCallbacks.connectionTerminated(LastSocketFail());
             break;
         }
-        else if  (err == 0) {
-            if (!receivedDataFromPeer) {
+        else if  (err == 0)
+        {
+            if (!receivedDataFromPeer)
+            {
                 // If we wait many seconds without ever receiving a video packet,
                 // assume something is broken and terminate the connection.
                 waitingForVideoMs += UDP_RECV_POLL_TIMEOUT_MS;
-                if (waitingForVideoMs >= FIRST_FRAME_TIMEOUT_SEC * 1000) {
+                if (waitingForVideoMs >= FIRST_FRAME_TIMEOUT_SEC * 1000)
+                {
                     Limelog("Terminating connection due to lack of video traffic\n");
                     ListenerCallbacks.connectionTerminated(ML_ERROR_NO_VIDEO_TRAFFIC);
                     break;
@@ -135,7 +138,6 @@ static void VideoReceiveThreadProc(void* context) {
             // Receive timed out; try again
             continue;
         }
-		
 
         if (!receivedDataFromPeer) {
             receivedDataFromPeer = true;
@@ -166,15 +168,19 @@ static void VideoReceiveThreadProc(void* context) {
         packet->sequenceNumber = BE16(packet->sequenceNumber);
         packet->timestamp = BE32(packet->timestamp);
         packet->ssrc = BE32(packet->ssrc);
+
         bool isMark = false;
         queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize], &isMark);
 		
-		if(err > 0 && (int)received_ecn == 1)
-		{
-				screamReceive(buffer, err, received_ecn, isMark);
-		}
+        if (err > 0 && (int)received_ecn == 1)
+        {
+            screamReceive(packet->sequenceNumber, packet->timestamp, buffer, err, received_ecn, isMark);
+        }
 
-        if (queueStatus == RTPF_RET_QUEUED) {
+        Limelog("ECN: ecn:%d size:%d ssrc:%d isMark:%d qStatus:%d seq:%d\n", received_ecn, err, packet->ssrc, isMark, queueStatus, packet->sequenceNumber);
+
+        if (queueStatus == RTPF_RET_QUEUED)
+        {
             // The queue owns the buffer
             buffer = NULL;
         }
