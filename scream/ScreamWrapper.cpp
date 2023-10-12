@@ -47,25 +47,31 @@ class ScreamRxProxy
             std::lock_guard<std::mutex> lock { lock_scream };
 
 			uint32_t time_ntp = getTimeInNtp();
+#if 1
 			if (time_ntp - last_received_time_ntp > 2 * 65536)
             { // 2 sec
 				receivedRtp = 0;
 				delete screamRx;
 				screamRx = new ScreamRx(SSRC, ACK_DIFF, REPORTED_RTP_PACKETS);
 				assert(screamRx != 0);
-				cerr << "Receiver state reset due to idle input" << endl;
+				printf("SCREAM: Receiver state reset due to idle input. ScreamTx recreated!\n");
 			}
+#endif
 			last_received_time_ntp = time_ntp;
 			receivedRtp++;
 			
 			ts = time_ntp; // test
 
-			if ((seqNr - lastSn) > 1) {
-				fprintf(stderr, "Packet(s) lost or reordered : %5d was received, previous rcvd is %5d \n", seqNr, lastSn);
+#if 0
+			if (seqNr != lastSn)
+            {
+				printf("Packet(s) lost or reordered : %5d was received, previous rcvd is %5d. diff:%d\n", seqNr, lastSn, int(seqNr) - int(lastSn));
 			}
+#endif
+
 			lastSn = seqNr;
 			
-			screamRx->receive(getTimeInNtp(), 0, SSRC, size, seqNr, received_ecn, isMark);
+			screamRx->receive(ts, 0, SSRC, size, seqNr, received_ecn, isMark);
 	  }
 	  
 	  bool getFeedback(unsigned char *buf, int *rtcpSize)
@@ -76,10 +82,21 @@ class ScreamRxProxy
         bool isFeedback = false;
         uint32_t rtcpFbInterval_ntp = screamRx->getRtcpFbInterval();
 
-        if (screamRx->isFeedback(time_ntp) && (screamRx->checkIfFlushAck() ||
-            (time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp)))
+        if (screamRx->isFeedback(time_ntp) &&
+                (screamRx->checkIfFlushAck() ||
+                (time_ntp - screamRx->getLastFeedbackT() > rtcpFbInterval_ntp)))
         {
-            isFeedback = screamRx->createStandardizedFeedback(getTimeInNtp(), true, buf, *rtcpSize);
+            isFeedback = screamRx->createStandardizedFeedback(time_ntp, true, buf, *rtcpSize);
+        }
+
+        if (isFeedback)
+        {
+#if 0
+                std::string str;
+                for (int i = 0; i < std::min(*rtcpSize, 15); ++i)
+                    str += std::to_string(int(buf[i])) + ' ';
+                printf("SCREAM: RTCP: '%s'\n", str.c_str());
+#endif
         }
 
         return isFeedback;
@@ -97,7 +114,7 @@ ScreamRxProxy sx;
 
 void screamReceive(uint16_t seqNr, uint32_t ts, char* buffer, int size, unsigned char ecn, bool isMark)
 {
-	  sx.receive(seqNr, ts, buffer, size, ecn, isMark);
+    sx.receive(seqNr, ts, buffer, size, ecn, isMark);
 };
 
 bool screamGetFeedback(unsigned char *buf, int *size)

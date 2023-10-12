@@ -103,6 +103,7 @@ void ScreamRx::Stream::receive(uint32_t time_ntp,
 		*/
 		highestSeqNr = seqNr;
 	}
+    //printf("SCREAM: highestSeqNr:%u\n", highestSeqNr);
 }
 
 bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
@@ -133,7 +134,10 @@ bool ScreamRx::Stream::getStandardizedFeedback(uint32_t time_ntp,
 	tmp_s = htons(tmp_s);
 	memcpy(buf + 6, &tmp_s, 2);
 	size += 2;
-	int ptr = 8;
+
+    //printf("RTCP: ts:%u highestSeqNr:%u nr:%d \n", highestSeqNr, nReportedRtpPackets - 1);
+
+    int ptr = 8;
 
 	/*
 	* Write 16bits report element for received RTP packets
@@ -294,8 +298,8 @@ int ScreamRx::getIx(uint32_t ssrc) {
 	return -1;
 }
 
-bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char *buf, int &size) {
-
+bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsigned char *buf, int &size)
+{
 	uint16_t tmp_s;
 	uint32_t tmp_l;
 	buf[0] = 0x80; // TODO FMT = CCFB in 5 LSB
@@ -311,7 +315,8 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsign
 	/*
 	* Generate RTCP feedback size until a safe sizelimit ~kMaxRtcpSize+128 byte is reached
 	*/
-	while (size < kMaxRtcpSize) {
+	while (size < kMaxRtcpSize)
+    {
 		/*
 		* TODO, we do the above stream fetching over again even though we have the
 		* stream in the first iteration, a bit unnecessary.
@@ -353,6 +358,9 @@ bool ScreamRx::createStandardizedFeedback(uint32_t time_ntp, bool isMark, unsign
 	uint16_t length = size / 4 - 1;
 	tmp_s = htons(length);
 	memcpy(buf + 2, &tmp_s, 2);
+
+
+    //printf("RTCP: RTS:%d len:%u\n", time_ntp, int(length));
 
 	/*
 	* Update stream RTCP feedback status

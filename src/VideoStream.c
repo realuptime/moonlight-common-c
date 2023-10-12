@@ -169,7 +169,7 @@ static void VideoReceiveThreadProc(void* context) {
             screamReceive(packet->sequenceNumber, packet->timestamp, buffer, err, received_ecn, isMark);
         }
 
-        Limelog("ECN: ecn:%d size:%d ssrc:%d isMark:%d qStatus:%d seq:%d\n", received_ecn, err, packet->ssrc, isMark, queueStatus, packet->sequenceNumber);
+        //Limelog("ECN: ecn:%d size:%d ssrc:%d isMark:%d qStatus:%d seq:%d\n", received_ecn, err, packet->ssrc, isMark, queueStatus, packet->sequenceNumber);
 
         if (queueStatus == RTPF_RET_QUEUED)
         {
