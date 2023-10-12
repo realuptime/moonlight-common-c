@@ -5,6 +5,7 @@
 #include "ScreamWrapper.h"
 
 #define RTCP_SIZE 2048
+#define RTCP_PACKET_TYPE 0x010f
 
 // NV control stream packet header for TCP
 typedef struct _NVCTL_TCP_PACKET_HEADER {
@@ -122,7 +123,6 @@ static PPLT_CRYPTO_CONTEXT decryptionCtx;
 #define IDX_RUMBLE_TRIGGER_DATA 9
 #define IDX_SET_MOTION_EVENT 10
 #define IDX_SET_RGB_LED 11
-#define IDX_RTCP 7
 
 #define CONTROL_STREAM_TIMEOUT_SEC 10
 #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
@@ -182,7 +182,6 @@ static const short packetTypesGen7[] = {
     -1,     // Rumble triggers (unused)
     -1,     // Set motion event (unused)
     -1,     // Set RGB LED (unused)
-	0x010f // RTCP
 };
 static const short packetTypesGen7Enc[] = {
     0x0302, // Request IDR frame
@@ -197,7 +196,6 @@ static const short packetTypesGen7Enc[] = {
     0x5500, // Rumble triggers (Sunshine protocol extension)
     0x5501, // Set motion event (Sunshine protocol extension)
     0x5502, // Set RGB LED (Sunshine protocol extension)
-	0x010f // RTCP
 };
 
 static const char requestIdrFrameGen3[] = { 0, 0 };
@@ -218,7 +216,6 @@ static const short payloadLengthsGen3[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
-	RTCP_SIZE, //RTCP
 };
 static const short payloadLengthsGen4[] = {
     sizeof(requestIdrFrameGen4), // Request IDR frame
@@ -227,7 +224,6 @@ static const short payloadLengthsGen4[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
-	RTCP_SIZE, //RTCP
 };
 static const short payloadLengthsGen5[] = {
     sizeof(startAGen5), // Start A
@@ -236,7 +232,6 @@ static const short payloadLengthsGen5[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
-	RTCP_SIZE, //RTCP
 };
 static const short payloadLengthsGen7[] = {
     sizeof(startAGen5), // Start A
@@ -245,7 +240,6 @@ static const short payloadLengthsGen7[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
-	RTCP_SIZE, // RTCP
 };
 static const short payloadLengthsGen7Enc[] = {
     sizeof(requestIdrFrameGen7Enc), // Request IDR frame
@@ -254,7 +248,6 @@ static const short payloadLengthsGen7Enc[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
-	RTCP_SIZE, //RTCP
 };
 
 static const char* preconstructedPayloadsGen3[] = {
@@ -628,7 +621,7 @@ static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint
     if (encryptedControlStream) {
         PNVCTL_ENCRYPTED_PACKET_HEADER encPacket;
         PNVCTL_ENET_PACKET_HEADER_V2 packet;
-        char tempBuffer[256];
+        char tempBuffer[1024 * 4];
 
         enetPacket = enet_packet_create(NULL,
                                         sizeof(*encPacket) + AES_GCM_TAG_LENGTH + sizeof(*packet) + paylen,
@@ -1388,6 +1381,7 @@ static void screamRtcpThreadFunc(void* context)
 
 	while (!PltIsThreadInterrupted(&screamRtcpThread))
     {
+         memset(rtcpPayload, 0, rtcpPayloadSize);
 		 if(screamGetFeedback(rtcpPayload, &screamSize))
          {
 			 if(rtcpPayloadSize < screamSize)
@@ -1400,12 +1394,24 @@ static void screamRtcpThreadFunc(void* context)
 			 }
 
              printf("RTCP: screamSize:%d\n", screamSize);
-             if (!sendMessageAndForget(0x010f, screamSize, rtcpPayload, CTRL_CHANNEL_GENERIC, ENET_PACKET_FLAG_RELIABLE, false))
+             //if (!sendMessageAndForget(
+             if (!sendMessageAndDiscardReply(
+                         RTCP_PACKET_TYPE,
+                         
+                         screamSize,
+                         //rtcpPayloadSize,
+                         
+                         rtcpPayload,
+                         
+                         //CTRL_CHANNEL_GENERIC,
+                         CTRL_CHANNEL_URGENT,
+
+                         ENET_PACKET_FLAG_RELIABLE,
+                         false))
              {
                     Limelog("RTCP Stats: Transaction failed: %d\n", (int)LastSocketError());
                     break;
              }
-			 memset(rtcpPayload, 0, rtcpPayloadSize);
 		 }
 		 PltSleepMsInterruptible(&screamRtcpThread, RTCP_INTERVAL_MS);
 	}
