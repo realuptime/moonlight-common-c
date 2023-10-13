@@ -164,7 +164,7 @@ static void VideoReceiveThreadProc(void* context) {
         bool isMark = false;
         queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize], &isMark);
 		
-        if (err > 0 && (int)received_ecn == 1)
+        if (err > 0)
         {
             screamReceive(packet->sequenceNumber, packet->timestamp, buffer, err, received_ecn, isMark);
         }
