@@ -113,14 +113,16 @@ static void VideoReceiveThreadProc(void* context) {
         }
 
         unsigned char received_ecn = 0;
-        err = recvUdpSocketECN(rtpSocket, buffer, receiveSize, useSelect, &received_ecn);
+        err = recvUdpSocketECN(rtpSocket, buffer, receiveSize, useSelect, &received_ecn); // recvmsg() to get TOS header
+        //err = recvUdpSocket(rtpSocket, buffer, receiveSize, useSelect); // recvfrom()
+        //Limelog("ECN: D: ecn:%d err:%d US:%d\n", received_ecn, err, useSelect);
         if (err < 0)
         {
             Limelog("Video Receive: recvUdpSocket() failed: %d\n", (int)LastSocketError());
             ListenerCallbacks.connectionTerminated(LastSocketFail());
             break;
         }
-        else if  (err == 0)
+        else if (err == 0)
         {
             if (!receivedDataFromPeer)
             {
@@ -169,15 +171,48 @@ static void VideoReceiveThreadProc(void* context) {
         packet->timestamp = BE32(packet->timestamp);
         packet->ssrc = BE32(packet->ssrc);
 
+        // RtpvAddPacket function modifies the contents of packet!
+        // So we save out fields of interest before the function call
+        // ssrc and seq fields for example are modified
+        // Possible reason is the cast of packet to PNV_VIDEO_PACKET and modifies it's fields
+        uint32_t ssrc = packet->ssrc;
+        uint32_t ts = packet->timestamp;
+        uint16_t seq = packet->sequenceNumber;
         bool isMark = false;
         queueStatus = RtpvAddPacket(&rtpQueue, packet, err, (PRTPV_QUEUE_ENTRY)&buffer[receiveSize], &isMark);
-		
+
+        bool screamPacketLoss = false;
         if (err > 0)
         {
-            screamReceive(packet->sequenceNumber, packet->timestamp, buffer, err, received_ecn, isMark);
+            screamPacketLoss = screamReceive(seq, ts, buffer, err, received_ecn, isMark) == false;
         }
 
-        //Limelog("ECN: ecn:%d size:%d ssrc:%d isMark:%d qStatus:%d seq:%d\n", received_ecn, err, packet->ssrc, isMark, queueStatus, packet->sequenceNumber);
+        if (screamPacketLoss)
+        {
+            Limelog(
+                "ECN:"
+                " ecn:%d"
+                " size:%d"
+                " ssrc:%d"
+                " isMark:%d"
+                " qStatus:%d"
+                " seq:%d"
+                " ts:%d"
+                " US:%d"
+                " NCSN:%d"
+                "\n"
+                ,
+                received_ecn,
+                err,
+                ssrc,
+                isMark,
+                queueStatus,
+                seq,
+                ts,
+                useSelect,
+                (int)rtpQueue.nextContiguousSequenceNumber
+            );
+        }
 
         if (queueStatus == RTPF_RET_QUEUED)
         {

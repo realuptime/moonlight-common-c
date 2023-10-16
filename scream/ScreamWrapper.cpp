@@ -8,6 +8,9 @@
 #include <iostream>
 #include "netinet/in.h"
 
+#define U16(x) ((unsigned short) ((x) & UINT16_MAX))
+#define isBefore16(x, y) (U16((x) - (y)) > (UINT16_MAX/2))
+
 #define ACK_DIFF -1
 #define REPORTED_RTP_PACKETS 64
 #define SSRC 1
@@ -33,20 +36,22 @@ uint32_t getTimeInNtp()
 class ScreamRxProxy
 {
 	public:
-		ScreamRxProxy()
-        {
-               screamRx = new ScreamRx(SSRC, ACK_DIFF, REPORTED_RTP_PACKETS);
-		}
+	ScreamRxProxy()
+    {
+	       screamRx = new ScreamRx(SSRC, ACK_DIFF, REPORTED_RTP_PACKETS);
+	}
 		
-		void receive(uint16_t seqNr, uint32_t ts, char* buf, int size, unsigned char received_ecn, bool isMark)
-        {
+	bool receive(uint16_t seqNr, uint32_t ts, char* buf, int size, unsigned char received_ecn, bool isMark)
+    {
             std::lock_guard<std::mutex> lock { lock_scream };
+
+            bool ret = true;
 
             if (t0 == 0.0f)
             {
                 struct timeval tp;
 			    gettimeofday(&tp, NULL);
-			    t0 = tp.tv_sec + tp.tv_usec*1e-6;
+			    t0 = tp.tv_sec + tp.tv_usec * 1e-6;
             }
 			
             uint32_t time_ntp = getTimeInNtp();
@@ -65,16 +70,17 @@ class ScreamRxProxy
 			
 			ts = time_ntp; // test
 
-#if 0
-			if (seqNr != lastSn)
+			if (lastSn && seqNr != U16(lastSn + 1))
             {
 				printf("Packet(s) lost or reordered : %5d was received, previous rcvd is %5d. diff:%d\n", seqNr, lastSn, int(seqNr) - int(lastSn));
+                ret = false;
 			}
-#endif
 
 			lastSn = seqNr;
 			
 			screamRx->receive(ts, 0, SSRC, size, seqNr, received_ecn, isMark);
+
+            return ret;
 	  }
 	  
 	  bool getFeedback(unsigned char *buf, int *rtcpSize)
@@ -117,9 +123,9 @@ class ScreamRxProxy
 ScreamRxProxy sx;
 } // namspace
 
-void screamReceive(uint16_t seqNr, uint32_t ts, char* buffer, int size, unsigned char ecn, bool isMark)
+bool screamReceive(uint16_t seqNr, uint32_t ts, char* buffer, int size, unsigned char ecn, bool isMark)
 {
-    sx.receive(seqNr, ts, buffer, size, ecn, isMark);
+    return sx.receive(seqNr, ts, buffer, size, ecn, isMark);
 };
 
 bool screamGetFeedback(unsigned char *buf, int *size)
