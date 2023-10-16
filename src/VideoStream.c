@@ -172,7 +172,7 @@ static void VideoReceiveThreadProc(void* context) {
         packet->ssrc = BE32(packet->ssrc);
 
         // RtpvAddPacket function modifies the contents of packet!
-        // So we save out fields of interest before the function call
+        // So we save our fields of interest before the function call
         // ssrc and seq fields for example are modified
         // Possible reason is the cast of packet to PNV_VIDEO_PACKET and modifies it's fields
         uint32_t ssrc = packet->ssrc;
