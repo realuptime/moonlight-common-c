@@ -214,7 +214,8 @@ int recvUdpSocket(SOCKET s, char* buffer, int size, bool useSelect)
 }
 
 
-int recvUdpSocketECN(SOCKET s, char* buffer, int size, bool useSelect, unsigned char *received_ecn) {
+int recvUdpSocketECN(SOCKET s, char* buffer, int size, bool useSelect, unsigned char *received_ecn)
+{
     int err;
 
     struct msghdr rcv_msg;
@@ -224,49 +225,57 @@ int recvUdpSocketECN(SOCKET s, char* buffer, int size, bool useSelect, unsigned 
 
     char rcv_ctrl_data[MAX_CTRL_SIZE];
 
-        /* Prepare message for receiving */
+    /* Prepare message for receiving */
+    memset(&rcv_iov[0], 0, sizeof(rcv_iov[0]));
     rcv_iov[0].iov_base = buffer;
     rcv_iov[0].iov_len = size;
 
+    memset(&rcv_msg, 0, sizeof(rcv_msg));
     rcv_msg.msg_name = NULL;        // Socket is connected
     rcv_msg.msg_namelen = 0;
     rcv_msg.msg_iov = rcv_iov;
     rcv_msg.msg_iovlen = 1;
     rcv_msg.msg_control = rcv_ctrl_data;
     rcv_msg.msg_controllen = MAX_CTRL_SIZE;
+    rcv_msg.msg_flags = 0;
 
-    do {
-        if (useSelect) {
+    do
+    {
+        if (useSelect)
+        {
             struct pollfd pfd;
 
             // Wait up to 100 ms for the socket to be readable
             pfd.fd = s;
             pfd.events = POLLIN;
             err = pollSockets(&pfd, 1, UDP_RECV_POLL_TIMEOUT_MS);
-            if (err <= 0) {
+            if (err <= 0)
+            {
                 // Return if an error or timeout occurs
                 return err;
             }
 
             // This won't block since the socket is readable
-	    err = recvmsg(s, &rcv_msg, 0);
+            err = recvmsg(s, &rcv_msg, 0);
         }
-        else {
+        else
+        {
             // The caller has already configured a timeout on this
             // socket via SO_RCVTIMEO, so we can avoid a syscall
             // for each packet.
-	    err = recvmsg(s, &rcv_msg, 0);
+	        err = recvmsg(s, &rcv_msg, 0);
             if (err < 0 &&
                     (LastSocketError() == EWOULDBLOCK ||
                      LastSocketError() == EINTR ||
                      LastSocketError() == EAGAIN ||
-         #if defined(LC_WINDOWS)
+#if defined(LC_WINDOWS)
                      // This error is specific to overlapped I/O which isn't even
                      // possible to perform with recvfrom(). It seems to randomly
                      // be returned instead of WSAETIMEDOUT on certain systems.
                      LastSocketError() == WSA_IO_PENDING ||
-         #endif
-                     LastSocketError() == ETIMEDOUT)) {
+#endif
+                     LastSocketError() == ETIMEDOUT))
+            {
                 // Return 0 for timeout
                 return 0;
             }
@@ -283,17 +292,17 @@ int recvUdpSocketECN(SOCKET s, char* buffer, int size, bool useSelect, unsigned 
 
     if (received_ecn && err > 0)
     {
-	struct cmsghdr *cmptr;
-	int *ecnptr;
-	for (cmptr = CMSG_FIRSTHDR(&rcv_msg); cmptr != NULL; cmptr = CMSG_NXTHDR(&rcv_msg, cmptr))
-	{
-	    if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS)
-	    {
-	        ecnptr = (int*)CMSG_DATA(cmptr);
+        struct cmsghdr *cmptr;
+        int *ecnptr;
+        for (cmptr = CMSG_FIRSTHDR(&rcv_msg); cmptr != NULL; cmptr = CMSG_NXTHDR(&rcv_msg, cmptr))
+        {
+            if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS)
+            {
+                ecnptr = (int*)CMSG_DATA(cmptr);
                 *received_ecn = *ecnptr;
-                //Limelog("ECN: ecn:%d sock:%d\n", *received_ecn, s);
+                //Limelog("ECN: ecn:%d sock:%d flags:%d\n", *received_ecn, s, rcv_msg.msg_flags);
             }
-	}
+        }
     }
 
     return err;
