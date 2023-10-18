@@ -1413,7 +1413,7 @@ bool screamCheckRTCP()
                      //CTRL_CHANNEL_GENERIC,
                      CTRL_CHANNEL_URGENT,
 
-                     ENET_PACKET_FLAG_RELIABLE,
+                     ENET_PACKET_FLAG_UNSEQUENCED,
                      false))
          {
                 PltUnlockMutex(&rtcpMutex);
