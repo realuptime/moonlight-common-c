@@ -76,6 +76,8 @@ static ENetPeer* peer;
 static PLT_MUTEX enetMutex;
 static bool usePeriodicPing;
 
+static PLT_MUTEX rtcpMutex;
+
 static PLT_THREAD lossStatsThread;
 static PLT_THREAD invalidateRefFramesThread;
 static PLT_THREAD requestIdrFrameThread;
@@ -290,6 +292,8 @@ int initializeControlStream(void) {
     LbqInitializeLinkedBlockingQueue(&asyncCallbackQueue, 30);
     PltCreateMutex(&enetMutex);
 
+    PltCreateMutex(&rtcpMutex);
+
     encryptedControlStream = APP_VERSION_AT_LEAST(7, 1, 431);
 
     if (AppVersionQuad[0] == 3) {
@@ -368,6 +372,7 @@ void destroyControlStream(void) {
     freeBasicLbqList(LbqDestroyLinkedBlockingQueue(&asyncCallbackQueue));
 
     PltDeleteMutex(&enetMutex);
+    PltDeleteMutex(&rtcpMutex);
 }
 
 void queueFrameInvalidationTuple(int startFrame, int endFrame) {
@@ -1377,51 +1382,70 @@ static void lossStatsThreadFunc(void* context) {
     }
 }
 
+static unsigned char* rtcpPayload = NULL;
+static int rtcpPayloadSize = 0;
+bool screamCheckRTCP()
+{
+    int screamSize = 0;
+
+    PltLockMutex(&rtcpMutex);
+
+    if (!rtcpPayloadSize || !rtcpPayload)
+    {
+        rtcpPayloadSize = RTCP_SIZE;
+        rtcpPayload = malloc(rtcpPayloadSize);
+        printf("RTCP: alloc: %d. ptr:%p\n", rtcpPayloadSize, rtcpPayload);
+        assert(rtcpPayload);
+    }
+
+    memset(rtcpPayload, 0, rtcpPayloadSize);
+    if(screamGetFeedback(rtcpPayload, &screamSize))
+    {
+         if(rtcpPayloadSize < screamSize)
+         {
+             //Limelog
+             printf("RTCP: realloc: %d -> %d. ptr:%p\n", rtcpPayloadSize, screamSize, rtcpPayload);
+             rtcpPayloadSize = screamSize;
+             free(rtcpPayload);
+             rtcpPayload = malloc(rtcpPayloadSize);
+         }
+
+         //printf("RTCP: screamSize:%d\n", screamSize);
+         //if (!sendMessageAndForget(
+         if (!sendMessageAndDiscardReply(
+                     RTCP_PACKET_TYPE,
+                     
+                     screamSize,
+                     //rtcpPayloadSize,
+                     
+                     rtcpPayload,
+                     
+                     //CTRL_CHANNEL_GENERIC,
+                     CTRL_CHANNEL_URGENT,
+
+                     ENET_PACKET_FLAG_RELIABLE,
+                     false))
+         {
+                PltUnlockMutex(&rtcpMutex);
+                Limelog("RTCP Stats: Transaction failed: %d\n", (int)LastSocketError());
+                return false;
+         }
+    }
+
+    PltUnlockMutex(&rtcpMutex);
+    return true;
+}
+
 static void screamRtcpThreadFunc(void* context)
 {
 	unsigned char* rtcpPayload;
 	int rtcpPayloadSize;
-    int screamSize = 0;
-	bool isFeedback = false;
 	
-    rtcpPayloadSize = RTCP_SIZE;
-	rtcpPayload = malloc(rtcpPayloadSize);
-    printf("RTCP Thread: alloc: %d. ptr:%p\n", rtcpPayloadSize, rtcpPayload);
-    assert(rtcpPayload);
-
 	while (!PltIsThreadInterrupted(&screamRtcpThread))
     {
-         memset(rtcpPayload, 0, rtcpPayloadSize);
-		 if(screamGetFeedback(rtcpPayload, &screamSize))
+         if (!screamCheckRTCP())
          {
-			 if(rtcpPayloadSize < screamSize)
-             {
-                 //Limelog
-                 printf("RTCP Thread: realloc: %d -> %d. ptr:%p\n", rtcpPayloadSize, screamSize, rtcpPayload);
-                 rtcpPayloadSize = screamSize;
-				 free(rtcpPayload);
-				 rtcpPayload = malloc(rtcpPayloadSize);
-			 }
-
-             //printf("RTCP: screamSize:%d\n", screamSize);
-             //if (!sendMessageAndForget(
-             if (!sendMessageAndDiscardReply(
-                         RTCP_PACKET_TYPE,
-                         
-                         screamSize,
-                         //rtcpPayloadSize,
-                         
-                         rtcpPayload,
-                         
-                         //CTRL_CHANNEL_GENERIC,
-                         CTRL_CHANNEL_URGENT,
-
-                         ENET_PACKET_FLAG_RELIABLE,
-                         false))
-             {
-                    Limelog("RTCP Stats: Transaction failed: %d\n", (int)LastSocketError());
-                    break;
-             }
+            break;
 		 }
 		 PltSleepMsInterruptible(&screamRtcpThread, RTCP_INTERVAL_MS);
 	}
