@@ -78,6 +78,8 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
+extern bool screamCheckRTCP();
+
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {
     int err;
@@ -185,6 +187,7 @@ static void VideoReceiveThreadProc(void* context) {
         if (err > 0)
         {
             screamPacketLoss = screamReceive(seq, ts, buffer, err, received_ecn, isMark) == false;
+            screamCheckRTCP();
         }
 
         if (screamPacketLoss)
