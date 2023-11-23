@@ -14,7 +14,6 @@ using namespace std;
 static const int kMaxRtcpSize = 900;
 
 // Time stamp scale
-static const int kTimeStampAtoScale = 1024;
 static const float ntp2SecScaleFactor = 1.0 / 65536;
 
 ScreamRx::Stream::Stream(uint32_t ssrc_) {

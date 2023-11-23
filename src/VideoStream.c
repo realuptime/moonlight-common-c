@@ -78,7 +78,7 @@ static void VideoPingThreadProc(void* context) {
     }
 }
 
-extern bool screamCheckRTCP();
+extern bool screamCheckRTCP(void);
 
 // Receive thread proc
 static void VideoReceiveThreadProc(void* context) {

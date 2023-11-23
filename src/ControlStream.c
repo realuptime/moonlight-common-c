@@ -1014,7 +1014,7 @@ static void controlReceiveThreadFunc(void* context) {
     while (!PltIsThreadInterrupted(&controlReceiveThread))
     {
         ENetEvent event;
-        enet_uint32 waitTimeMs;
+        enet_uint32 waitTimeMs = 0;
 
         PltLockMutex(&enetMutex);
 
@@ -1374,7 +1374,7 @@ static void lossStatsThreadFunc(void* context) {
 
 static unsigned char* rtcpPayload = NULL;
 static int rtcpPayloadSize = 0;
-bool screamCheckRTCP()
+bool screamCheckRTCP(void)
 {
     int screamSize = 0;
 
@@ -1428,8 +1428,7 @@ bool screamCheckRTCP()
 
 static void screamRtcpThreadFunc(void* context)
 {
-	unsigned char* rtcpPayload;
-	int rtcpPayloadSize;
+	unsigned char* rtcpPayload = NULL;
 	
 	while (!PltIsThreadInterrupted(&screamRtcpThread))
     {
@@ -1442,7 +1441,10 @@ static void screamRtcpThreadFunc(void* context)
 
     Limelog("RTCP Thread stopped!\n");
 
-	free(rtcpPayload);
+    if (rtcpPayload)
+    {
+        free(rtcpPayload);
+    }
 }
 
 static void requestIdrFrame(void) {
