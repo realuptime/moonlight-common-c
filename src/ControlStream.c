@@ -1592,6 +1592,7 @@ int stopControlStream(void) {
     }
     
     PltInterruptThread(&lossStatsThread);
+	PltInterruptThread(&screamRtcpThread);
     PltInterruptThread(&requestIdrFrameThread);
     PltInterruptThread(&controlReceiveThread);
     PltInterruptThread(&asyncCallbackThread);
