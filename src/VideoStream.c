@@ -142,6 +142,7 @@ static void VideoReceiveThreadProc(void* context) {
             // Receive timed out; try again
             continue;
         }
+		
 
         if (!receivedDataFromPeer) {
             receivedDataFromPeer = true;
