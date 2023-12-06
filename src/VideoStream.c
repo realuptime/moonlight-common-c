@@ -338,15 +338,6 @@ int startVideoStream(void* rendererContext, int drFlags) {
 	    printf("ECN: socket set to recvtos\n");
     }
 
-    // Connect our video socket to the target address and port
-    LC_ASSERT(VideoPortNumber != 0);
-    err = connectUdpSocket(rtpSocket, &RemoteAddr, RemoteAddrLen, VideoPortNumber);
-    if (err != 0) {
-        VideoCallbacks.cleanup();
-        closeSocket(rtpSocket);
-        return err;
-    }
-
     VideoCallbacks.start();
 
     err = PltCreateThread("VideoRecv", VideoReceiveThreadProc, NULL, &receiveThread);
