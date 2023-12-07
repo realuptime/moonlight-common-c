@@ -328,15 +328,24 @@ int startVideoStream(void* rendererContext, int drFlags) {
     }
 
     // Enable ECN receival
-    unsigned char set = 0x03;
+    unsigned char set = 0x01;
     if (setsockopt(rtpSocket, IPPROTO_IP, IP_RECVTOS, &set, sizeof(set)) < 0)
     {
-	    printf("ECN: ERR: cannot set recvtos on incoming socket\n");
+	    printf("ECN: ERR: cannot set IP_RECVTOS on incoming socket\n");
     }
     else
     {
-	    printf("ECN: socket set to recvtos\n");
+	    printf("ECN: socket set to IP_RECVTOS\n");
     }
+    if (setsockopt(rtpSocket, IPPROTO_IPV6, IPV6_RECVTCLASS, &set, sizeof(set)) < 0)
+    {
+	    printf("ECN: ERR: cannot set IPV6_RECVTCLASS on incoming socket\n");
+    }
+    else
+    {
+	    printf("ECN: socket set to IPV6_RECVTCLASS\n");
+    }
+
 
     VideoCallbacks.start();
 
