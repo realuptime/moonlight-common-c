@@ -299,8 +299,14 @@ int recvUdpSocketECN(SOCKET s, char* buffer, int size, bool useSelect, unsigned 
             if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_TOS)
             {
                 ecnptr = (int*)CMSG_DATA(cmptr);
-                *received_ecn = *ecnptr;
-                //Limelog("ECN: ecn:%d sock:%d flags:%d\n", *received_ecn, s, rcv_msg.msg_flags);
+                *received_ecn = *ecnptr & 0x3;
+                //Limelog("ECN: IPV4: ecn:%d sock:%d flags:%d\n", *received_ecn, s, rcv_msg.msg_flags);
+            }
+            else if (cmptr->cmsg_level == IPPROTO_IPV6 && cmptr->cmsg_type == IPV6_TCLASS)
+            {
+                ecnptr = (int*)CMSG_DATA(cmptr);
+                *received_ecn = *ecnptr & 0x3;
+                //Limelog("ECN: IPV6: ecn:%d sock:%d flags:%d\n", *received_ecn, s, rcv_msg.msg_flags);
             }
         }
     }
